@@ -1,0 +1,102 @@
+---
+title: "Reproducible Research, Assignment 2"
+author: "Marta Fisher"
+date: "June 3, 2016"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+Title
+==========
+
+#Synopsis
+This report uses the NOAA Storm Database to investigate health and economic outcomes across the United States
+
+#Data Processing
+
+download data
+```{r cache=TRUE}
+library(downloader)
+download("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", dest = "Reproducible Research/stormdata.csv.bz2", mode = "wb")
+StormData <- read.csv("Reproducible Research/stormdata.csv.bz2")
+head(StormData)
+```
+
+Economic Impacts need to be calculated in the correct units. Therefore, the PROPDMG and PROPDMGEXP columns will be multiplied to create a single PropertyDamage column. Similarly, CROPDMG and CROPDMGEXP will be multiplied to CropDamage. Documentation specifies that this column should contain the letters K for thousands, M for millions, and B for billions. H was not defined but I assumed that it was used to indicate hundreds (7 cases). Damage exponents ?, 1, and 8 never had any crop or property damage value associated with them and 2 did not have crop value associated, so they can be changed to empty cells (42 cases). Any row with any other damage exponent was deleted as I could not find a way to interpret them (299 cases). Rows with values in the PROPDMG or CROPDMG columns with no values in the associate exponent column were also deleted (78 cases).
+```{r}
+library(stringr)
+library(dplyr)
+#editing Property Damage portion
+StormDataEd <- mutate(StormData, PROPDMGEXP = str_replace(PROPDMGEXP, "1", ""))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, ignore.case("h"), 100))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, ignore.case("k"), 1000))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, ignore.case("m"), 1000000))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, ignore.case("b"), 1000000000))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, "8", ""))
+StormDataEd <- mutate(StormDataEd, PROPDMGEXP = str_replace(PROPDMGEXP, "\\?", ""))
+StormDataEd <- filter(StormDataEd, PROPDMGEXP != "+" & PROPDMGEXP != "-" & PROPDMGEXP != "0" & PROPDMGEXP != "2" & PROPDMGEXP != "3" & PROPDMGEXP != "4" & PROPDMGEXP != "5" & PROPDMGEXP != "6" & PROPDMGEXP != "7")
+StormDataEd <- filter(StormDataEd, !(PROPDMG > 0 & PROPDMGEXP == ""))
+#editing Crop Damage portion
+StormDataEd <- mutate(StormDataEd, CROPDMGEXP = str_replace(CROPDMGEXP, ignore.case("k"), 1000))
+StormDataEd <- mutate(StormDataEd, CROPDMGEXP = str_replace(CROPDMGEXP, ignore.case("m"), 1000000))
+StormDataEd <- mutate(StormDataEd, CROPDMGEXP = str_replace(CROPDMGEXP, ignore.case("b"), 1000000000))
+StormDataEd <- mutate(StormDataEd, CROPDMGEXP = str_replace(CROPDMGEXP, "\\?", ""))
+StormDataEd <- mutate(StormDataEd, CROPDMGEXP = str_replace(CROPDMGEXP, "2", ""))
+StormDataEd <- filter(StormDataEd, CROPDMGEXP != "0")
+StormDataEd <- filter(StormDataEd, !(CROPDMG > 0 & CROPDMGEXP == ""))
+#adding the two columns
+StormDataEd <- mutate(StormDataEd, PropertyDamage = PROPDMG * as.numeric(PROPDMGEXP), CropDamage = CROPDMG * as.numeric(CROPDMGEXP))
+```
+The EVTYPE column also needs to be edited. There are some event types that appear to be alternate spellings of the same type. Any value that was changed was changed to an event type found section 7 of the Storm Data Prepartion documentation. 
+```{r}
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "TSTM", "THUNDERSTORM"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "THUNDERSTORMS", "THUNDERSTORM"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "SEVERE THUNDERSTORM", "THUNDERSTORM"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "WINDSS", "WIND"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "WINDS", "WIND"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "\\(", ""))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "\\)", ""))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "THUNDERSTORM WIND G45", "THUNDERSTORM WIND"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "WILD/FOREST FIRE", "WILDFIRE"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "WINTER WEATHER/MIX", "WINTER WEATHER"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "WINTRY MIX", "WINTER WEATHER"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "FLOODING", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "FLOODS", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "URBAN/SML STREAM FLD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "URBAN/SMALL STREAM FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "URBAN FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "RIVER FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "FLOOD/FLASH FLOOD", "FLASH FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "COASTAL FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "Coastal Flooding", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "LAKESHORE FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "FLASH FLOOD/FLOOD", "FLASH FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "TIDAL FLOOD", "FLOOD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "RIP CURRENTS", "RIP CURRENT"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "STORM SURGE/TIDE", "STORM TIDE"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "EXTREME WINDCHILL", "EXTREME COLD/WIND CHILL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "FUNNEL CLOUDS", "FUNNEL CLOUD"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "GUSTY WIND", "HIGH WIND"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "RECORD WARMTH", "EXCESSIVE HEAT"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "UNSEASONABLY WARM", "EXCESSIVE HEAT"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "RECORD HEAT", "EXCESSIVE HEAT"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "RECORD COLD", "EXTREME COLD/WIND CHILL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "EXTREME COLD/WIND CHILL TEMPERATURES", "EXTREME COLD/WIND CHILL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "SMALL HAIL", "HAIL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "HAIL 75", "HAIL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "HAIL 0.75", "HAIL"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "SNOW AND ICE", "ICE STORM"))
+StormDataEd <- mutate(StormDataEd, EVTYPE = str_replace(EVTYPE, "HEAVY SNOW SQUALLS", "HEAVY SNOW"))
+
+MyReplace <- function(entry, entlen){
+        if(str_length(entry) == entlen){str_replace()}
+}
+
+#Problems5 <- subset(StormDataEd, EVTYPE == "THUNDERSTORM WIND (G45)", select = c(STATE__, BGN_DATE, EVTYPE, REMARKS))
+```
+
+#Results
+Severe Weather Events and Their Effect on Population Health 
+
+Severe Weather Events and Their Economic Consequences
